@@ -194,17 +194,32 @@ exports.updateTask = async (req, res) => {
 // @route   PUT /api/tasks/:id/move
 // @access  Private
 exports.moveTask = async (req, res) => {
+  const connection = await db.getConnection();
+  
   try {
     const taskId = req.params.id;
     const { column_id, position } = req.body;
 
+    console.log('Moviendo tarea:', { taskId, column_id, position });
+
+    // Validar datos
+    if (!column_id || position === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: 'column_id y position son requeridos'
+      });
+    }
+
+    await connection.beginTransaction();
+
     // Obtener info actual de la tarea
-    const [currentTask] = await db.query(
+    const [currentTask] = await connection.query(
       'SELECT column_id, position FROM tasks WHERE id = ?',
       [taskId]
     );
 
     if (currentTask.length === 0) {
+      await connection.rollback();
       return res.status(404).json({
         success: false,
         message: 'Tarea no encontrada'
@@ -214,50 +229,69 @@ exports.moveTask = async (req, res) => {
     const oldColumnId = currentTask[0].column_id;
     const oldPosition = currentTask[0].position;
 
+    console.log('Posición anterior:', { oldColumnId, oldPosition });
+    console.log('Nueva posición:', { column_id, position });
+
     // Si cambió de columna
     if (oldColumnId !== column_id) {
-      // Actualizar posiciones en columna anterior
-      await db.query(
+      // Actualizar posiciones en columna anterior (llenar el hueco)
+      await connection.query(
         'UPDATE tasks SET position = position - 1 WHERE column_id = ? AND position > ?',
         [oldColumnId, oldPosition]
       );
 
       // Hacer espacio en nueva columna
-      await db.query(
+      await connection.query(
         'UPDATE tasks SET position = position + 1 WHERE column_id = ? AND position >= ?',
         [column_id, position]
+      );
+
+      // Actualizar la tarea movida
+      await connection.query(
+        'UPDATE tasks SET column_id = ?, position = ? WHERE id = ?',
+        [column_id, position, taskId]
       );
     } else {
       // Mismo columna, solo cambió posición
       if (position > oldPosition) {
-        await db.query(
+        // Mover hacia abajo
+        await connection.query(
           'UPDATE tasks SET position = position - 1 WHERE column_id = ? AND position > ? AND position <= ?',
           [column_id, oldPosition, position]
         );
       } else if (position < oldPosition) {
-        await db.query(
+        // Mover hacia arriba
+        await connection.query(
           'UPDATE tasks SET position = position + 1 WHERE column_id = ? AND position >= ? AND position < ?',
           [column_id, position, oldPosition]
         );
       }
+
+      // Actualizar la tarea movida
+      await connection.query(
+        'UPDATE tasks SET position = ? WHERE id = ?',
+        [position, taskId]
+      );
     }
 
-    // Actualizar la tarea movida
-    await db.query(
-      'UPDATE tasks SET column_id = ?, position = ? WHERE id = ?',
-      [column_id, position, taskId]
-    );
+    await connection.commit();
+
+    console.log('Tarea movida exitosamente');
 
     res.json({
       success: true,
       message: 'Tarea movida exitosamente'
     });
   } catch (error) {
+    await connection.rollback();
     console.error('Error en moveTask:', error);
     res.status(500).json({
       success: false,
-      message: 'Error al mover tarea'
+      message: 'Error al mover tarea',
+      error: error.message
     });
+  } finally {
+    connection.release();
   }
 };
 
