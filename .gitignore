@@ -1,0 +1,33 @@
+# Node.js general
+node_modules/
+npm-debug.log
+yarn-debug.log*
+yarn-error.log*
+
+# Variables de entorno
+.env
+
+# Logs
+logs/
+*.log
+
+# IDEs y editores
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Backend específico
+taskflow-backend/node_modules/
+taskflow-backend/dist/
+taskflow-backend/.env
+
+# Frontend específico
+taskflow-frontend/node_modules/
+taskflow-frontend/dist/
+taskflow-frontend/build/
+taskflow-frontend/.env
